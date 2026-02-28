@@ -145,7 +145,13 @@ const DesignForm = ({
             placeholder="e.g., 'Something gothic but cute', 'Must include a beret'"
             value={formData.additionalNotes}
             onChange={(e) => onFormChange("additionalNotes", e.target.value)}
+            maxLength={500}
           />
+          {formData.additionalNotes.length > 400 && (
+            <p className="text-right text-xs text-stone-400 mt-1">
+              {formData.additionalNotes.length} / 500
+            </p>
+          )}
         </label>
       </div>
 

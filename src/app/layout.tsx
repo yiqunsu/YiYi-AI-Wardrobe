@@ -14,8 +14,27 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "YIYI | AI 穿衣助手",
-  description: "桌面端落地页框架：导航、产品简介、邀请试用、使用说明与底部信息。",
+  title: "YiYi AI — AI Outfit Planner & Smart Wardrobe",
+  description:
+    "YiYi AI generates personalized daily outfit recommendations using your wardrobe, real-time weather, and AI. Manage your closet, plan outfits, and discover your style with AI-powered fashion intelligence.",
+  keywords: [
+    "AI outfit planner",
+    "AI wardrobe",
+    "outfit generator",
+    "smart closet",
+    "AI fashion",
+    "daily outfit",
+    "wardrobe organizer",
+    "outfit recommendation",
+    "AI styling",
+    "virtual try-on",
+  ],
+  openGraph: {
+    title: "YiYi AI — AI Outfit Planner & Smart Wardrobe",
+    description:
+      "Generate personalized outfit recommendations with AI. Upload your wardrobe, get weather-aware daily looks, and discover your style.",
+    type: "website",
+  },
 };
 
 export default function RootLayout({

@@ -1,7 +1,6 @@
 import Footer from "@/app/components/home/Footer";
 import Navbar from "@/app/components/home/Navbar";
 import Image from "next/image";
-import Link from "next/link";
 
 export default function ShowcasePage() {
   return (
@@ -64,22 +63,6 @@ export default function ShowcasePage() {
             ))}
           </div>
 
-          <div className="mt-16 text-center rounded-2xl border border-dashed border-[#C9B89C] bg-[#EDE0D4]/30 p-12">
-            <span className="material-symbols-outlined text-4xl text-[#8B4513]/50 mb-4 block">
-              auto_awesome
-            </span>
-            <h3 className="font-bold text-stone-900 mb-2">Built something with YiYi?</h3>
-            <p className="text-stone-600 mb-6 max-w-md mx-auto">
-              Share your project and get featured in our showcase.
-            </p>
-            <Link
-              href="#"
-              className="inline-flex items-center gap-2 px-6 py-3 rounded-xl border-2 border-[#8B5E3C] text-[#8B5E3C] font-semibold hover:bg-[#8B5E3C] hover:text-white transition-colors"
-            >
-              Submit Project
-              <span className="material-symbols-outlined">arrow_forward</span>
-            </Link>
-          </div>
         </div>
       </main>
       <Footer />

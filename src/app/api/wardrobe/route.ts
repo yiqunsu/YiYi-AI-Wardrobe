@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseClient } from "@/lib/supabase/server";
 
 const BUCKET_WARDROBE_ITEMS = "wardrobe-items";
-const SIGNED_URL_EXPIRY = 60 * 60; // 1 hour
+const SIGNED_URL_EXPIRY = 60 * 60 * 24 * 7; // 7 days
 
 type WardrobeCategory =
   | "tops"

@@ -103,7 +103,7 @@ export default function DashboardPage() {
                 Manage your account and preferences.
               </p>
               <Link
-                href="#"
+                href="/settings"
                 className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-[#C9B89C] text-[#171412] font-medium hover:bg-[#EDE0D4] transition-colors"
               >
                 Account Settings

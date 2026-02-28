@@ -140,12 +140,9 @@ export default function PricingPage() {
                   Dedicated support
                 </li>
               </ul>
-              <Link
-                href="#"
-                className="block w-full text-center py-3 rounded-xl border-2 border-stone-300 text-stone-600 font-semibold hover:border-[#8B5E3C] hover:text-[#8B5E3C] transition-colors"
-              >
-                Contact Sales
-              </Link>
+              <div className="block w-full text-center py-3 rounded-xl border-2 border-stone-200 text-stone-400 font-semibold cursor-not-allowed select-none">
+                Coming Soon
+              </div>
             </div>
           </div>
         </div>

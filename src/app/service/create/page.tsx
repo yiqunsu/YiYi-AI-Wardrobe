@@ -26,7 +26,10 @@ export default function ServicePage() {
   const [generatedOutfit, setGeneratedOutfit] = useState<{
     image: string | null;
     message: string;
+    description: string;
     selectedItemIds: string[];
+    generationId: string | null;
+    selectedItems: { id: string; name: string; category: string; imageUrl: string }[];
   } | null>(null);
 
   const [isGenerating, setIsGenerating] = useState(false);
@@ -102,13 +105,38 @@ export default function ServicePage() {
       const data = (await res.json()) as {
         imageUrl: string | null;
         message: string;
+        description: string;
         selectedItemIds: string[];
+        generationId: string | null;
       };
+
+      // 拉取选中单品的图片信息（用于详情弹窗），失败时静默
+      let selectedItems: { id: string; name: string; category: string; imageUrl: string }[] = [];
+      if (data.selectedItemIds?.length > 0) {
+        try {
+          const wardrobeRes = await fetch("/api/wardrobe", {
+            headers: { Authorization: `Bearer ${session.access_token}` },
+          });
+          if (wardrobeRes.ok) {
+            const wardrobeData = (await wardrobeRes.json()) as {
+              items: { id: string; name: string; category: string; imageUrl: string }[];
+            };
+            selectedItems = (wardrobeData.items ?? []).filter((item) =>
+              data.selectedItemIds.includes(item.id)
+            );
+          }
+        } catch {
+          // 静默失败，详情面板不展示图片
+        }
+      }
 
       setGeneratedOutfit({
         image: data.imageUrl,
         message: data.message,
+        description: data.description ?? "",
         selectedItemIds: data.selectedItemIds ?? [],
+        generationId: data.generationId ?? null,
+        selectedItems,
       });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Something went wrong. Please try again.";

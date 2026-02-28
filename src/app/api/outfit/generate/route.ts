@@ -9,7 +9,7 @@ import { stitchImagesVertically } from "@/lib/image/stitchImages";
 const BUCKET_WARDROBE = "wardrobe-items";
 const BUCKET_MODELS = "model-photos";
 const BUCKET_OUTFITS = "generated-outfits";
-const SIGNED_URL_TTL = 60 * 60; // 1h
+const SIGNED_URL_TTL = 60 * 60 * 24 * 7; // 7 days
 
 interface GenerateBody {
   lat?: number;
@@ -49,7 +49,27 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser(token);
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // ── 2. 解析请求体 ────────────────────────────────────────
+  // ── 2. 配额检查：每日最多 5 次 ──────────────────────────
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setUTCHours(23, 59, 59, 999);
+
+  const { count: todayCount } = await supabase
+    .from("outfit_generations")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .gte("created_at", todayStart.toISOString())
+    .lte("created_at", todayEnd.toISOString());
+
+  if ((todayCount ?? 0) >= 5) {
+    return NextResponse.json(
+      { error: "Daily limit reached. You can generate up to 5 outfits per day." },
+      { status: 429 }
+    );
+  }
+
+  // ── 3. 解析请求体 ────────────────────────────────────────
   let body: GenerateBody;
   try {
     body = (await req.json()) as GenerateBody;
@@ -60,7 +80,7 @@ export async function POST(req: NextRequest) {
   const { lat, lon, occasion = "", modelId, additionalNotes = "", location = "" } = body;
   const date = body.date ? new Date(body.date) : new Date();
 
-  // ── 3. 获取天气 ──────────────────────────────────────────
+  // ── 4. 获取天气 ──────────────────────────────────────────
   const weather =
     typeof lat === "number" && typeof lon === "number"
       ? await getWeatherForLocation(lat, lon, date).catch(() => null)
@@ -164,27 +184,33 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 7. 保存历史记录 ──────────────────────────────────────
+  let generationId: string | null = null;
   try {
-    await supabase.from("outfit_generations").insert({
-      user_id: user.id,
-      model_id: modelId || null,
-      location: location,
-      location_lat: lat ?? null,
-      location_lon: lon ?? null,
-      occasion_date: date.toISOString().slice(0, 10),
-      occasion: occasion,
-      additional_notes: additionalNotes || null,
-      result_image_path: resultImagePath,
-      result_message: message,
-      result_description: imagePrompt,
-      selected_item_ids: selectedItemIds,
-      is_liked: false,
-    });
+    const { data: insertedRow } = await supabase
+      .from("outfit_generations")
+      .insert({
+        user_id: user.id,
+        model_id: modelId || null,
+        location: location,
+        location_lat: lat ?? null,
+        location_lon: lon ?? null,
+        occasion_date: date.toISOString().slice(0, 10),
+        occasion: occasion,
+        additional_notes: additionalNotes || null,
+        result_image_path: resultImagePath,
+        result_message: message,
+        result_description: imagePrompt,
+        selected_item_ids: selectedItemIds,
+        is_liked: false,
+      })
+      .select("id")
+      .single();
+    generationId = (insertedRow as { id: string } | null)?.id ?? null;
   } catch (e) {
     // 历史保存失败不影响返回结果
     console.error("[outfit/generate] History save error:", e);
   }
 
   // ── 8. 返回结果 ──────────────────────────────────────────
-  return NextResponse.json({ imageUrl, message, selectedItemIds });
+  return NextResponse.json({ imageUrl, message, description: imagePrompt, selectedItemIds, generationId });
 }

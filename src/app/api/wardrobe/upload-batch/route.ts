@@ -44,6 +44,38 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // ── 配额检查 ──────────────────────────────────────────────
+    // 1. 衣橱总量上限 50 件
+    const { count: totalItems } = await supabase
+      .from("wardrobe_items")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id);
+
+    if ((totalItems ?? 0) >= 50) {
+      return NextResponse.json(
+        { error: "Wardrobe limit reached. You can store up to 50 items." },
+        { status: 429 }
+      );
+    }
+
+    // 2. 本月上传上限 50 件
+    const startOfMonth = new Date();
+    startOfMonth.setUTCDate(1);
+    startOfMonth.setUTCHours(0, 0, 0, 0);
+
+    const { count: monthItems } = await supabase
+      .from("wardrobe_items")
+      .select("*", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", startOfMonth.toISOString());
+
+    if ((monthItems ?? 0) >= 50) {
+      return NextResponse.json(
+        { error: "Monthly upload limit reached. You can upload up to 50 items per month." },
+        { status: 429 }
+      );
+    }
+
     const formData = await request.formData();
     const byNameFiles = formData.getAll("files") as File[];
     const list = (byNameFiles.length > 0 ? byNameFiles : (formData.getAll("file") as File[])).filter(
@@ -57,6 +89,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: `At most ${MAX_FILES} files per batch` },
         { status: 400 }
+      );
+    }
+
+    // 批次上传后是否超过总量/月度上限
+    if ((totalItems ?? 0) + list.length > 50) {
+      return NextResponse.json(
+        {
+          error: `This batch would exceed the 50-item wardrobe limit (currently ${totalItems ?? 0} items). Please remove some items first.`,
+        },
+        { status: 429 }
+      );
+    }
+    if ((monthItems ?? 0) + list.length > 50) {
+      return NextResponse.json(
+        {
+          error: `This batch would exceed the 50-upload monthly limit (${monthItems ?? 0} uploaded this month). Try again next month.`,
+        },
+        { status: 429 }
       );
     }
 
