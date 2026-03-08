@@ -5,7 +5,7 @@ const ServiceHero = () => {
         Design Your Moment
       </h1>
       <p className="text-[#5a3a1b] dark:text-[#5a3a1b] text-lg font-medium italic">
-        "What should we wear today, Master?"
+        "Ready to create your perfect look?"
       </p>
     </div>
   );

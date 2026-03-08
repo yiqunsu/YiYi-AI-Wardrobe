@@ -138,11 +138,11 @@ const DesignForm = ({
             <span className="material-symbols-outlined text-[#8B4513]">
               magic_button
             </span>
-            Anything else, Master?
+            Anything else?
           </span>
           <textarea
             className="w-full rounded-lg border border-[#C9B89C] bg-white p-4 text-base flex-1 min-h-[100px] focus:ring-[#8B4513] focus:border-[#8B4513] placeholder:italic outline-none resize-none text-[#171412] placeholder:text-[#857266]"
-            placeholder="e.g., 'Something gothic but cute', 'Must include a beret'"
+            placeholder="e.g., 'Something gothic but cute', 'Clean-Fit style (all black outfit)', etc."
             value={formData.additionalNotes}
             onChange={(e) => onFormChange("additionalNotes", e.target.value)}
             maxLength={500}
