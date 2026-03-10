@@ -12,7 +12,6 @@
     "@google/genai": "^1.40.0",
     "@supabase/supabase-js": "^2.91.0",
     "@tanstack/react-query": "^5.90.21",
-    "@tanstack/react-query-devtools": "^5.91.3",
     "next": "16.1.4",
     "p-limit": "^7.3.0",
     "react": "19.2.3",
@@ -23,6 +22,7 @@
     "zod-to-json-schema": "^3.25.1"
   },
   "devDependencies": {
+    "@tanstack/react-query-devtools": "^5.91.3",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
