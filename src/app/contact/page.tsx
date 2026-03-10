@@ -1,5 +1,9 @@
-import Navbar from "@/app/components/home/Navbar";
-import Footer from "@/app/components/home/Footer";
+/**
+ * Contact page [module: marketing / static pages]
+ * Provides contact information and a form for user inquiries.
+ */
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 
 export default function ContactPage() {
   return (

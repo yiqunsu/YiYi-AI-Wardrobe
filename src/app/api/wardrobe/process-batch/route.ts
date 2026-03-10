@@ -1,6 +1,11 @@
+/**
+ * POST /api/wardrobe/process-batch [module: api / wardrobe]
+ * Processes up to 10 wardrobe items in parallel (capped by CONCURRENCY limit).
+ * Returns separate success and failed ID lists so the client can retry failures.
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseClient } from "@/lib/supabase/server";
-import { processOneWardrobeItem } from "@/lib/wardrobe/processOneWardrobeItem";
+import { createSupabaseClient } from "@/lib/db/server";
+import { processOneWardrobeItem } from "@/lib/wardrobe/wardrobe.service";
 
 const MAX_IDS = 10;
 /** 同一时刻最多并行处理几条，避免 Gemini 限流 */

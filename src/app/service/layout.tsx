@@ -1,11 +1,16 @@
+/**
+ * Service section layout [module: app / service]
+ * Wraps all /service/* pages with: ProtectedRoute guard, ModelsProvider, HistoryProvider,
+ * ServiceNavbar (top), ServiceSidebar (left), and ServiceFooter (bottom).
+ */
 "use client";
 
-import ProtectedRoute from "@/app/components/auth/ProtectedRoute";
-import ServiceNavbar from "@/app/components/ai_service/ServiceNavbar";
-import ServiceSidebar from "@/app/components/ai_service/ServiceSidebar";
-import ServiceFooter from "@/app/components/ai_service/ServiceFooter";
-import { ModelsProvider } from "@/app/contexts/ModelsContext";
-import { HistoryProvider } from "@/app/contexts/HistoryContext";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import ServiceNavbar from "@/components/layout/ServiceNavbar";
+import ServiceSidebar from "@/components/layout/ServiceSidebar";
+import ServiceFooter from "@/components/layout/ServiceFooter";
+import { ModelsProvider } from "@/contexts/ModelsContext";
+import { HistoryProvider } from "@/contexts/HistoryContext";
 
 export default function ServiceLayout({
   children,

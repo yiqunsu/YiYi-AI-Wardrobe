@@ -1,10 +1,15 @@
+/**
+ * Outfit history page [module: app / service / history]
+ * Displays a chronological list of past AI-generated outfits with their selected items,
+ * images, and like/delete actions.
+ */
 "use client";
 
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
-import { useHistory } from "@/app/contexts/HistoryContext";
-import type { HistoryItem } from "@/app/contexts/HistoryContext";
-import type { SelectedWardrobeItem } from "@/lib/supabase-data";
+import { useHistory } from "@/contexts/HistoryContext";
+import type { HistoryItem } from "@/contexts/HistoryContext";
+import type { SelectedWardrobeItem } from "@/types/outfit.types";
 
 function formatDate(d: Date) {
   const today = new Date();
@@ -259,7 +264,7 @@ function HistoryCard({
             <div className="bg-[#FAF6F2] rounded-xl px-3 py-2.5">
               {description ? (
                 <>
-                  <p className={`text-xs text-stone-500 leading-relaxed italic ${descExpanded ? "" : "line-clamp-2"}`}>
+                  <p className={`text-xs text-stone-500 leading-relaxed italic whitespace-pre-wrap ${descExpanded ? "" : "line-clamp-2"}`}>
                     &ldquo;{description}&rdquo;
                   </p>
                   {descLong && (

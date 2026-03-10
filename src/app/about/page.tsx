@@ -1,5 +1,9 @@
-import Navbar from "@/app/components/home/Navbar";
-import Footer from "@/app/components/home/Footer";
+/**
+ * About page [module: marketing / static pages]
+ * Static page introducing the YiYi AI product, team, and mission.
+ */
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 
 export default function AboutPage() {
   return (

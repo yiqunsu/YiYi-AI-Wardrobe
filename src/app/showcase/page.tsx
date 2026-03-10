@@ -1,5 +1,9 @@
-import Footer from "@/app/components/home/Footer";
-import Navbar from "@/app/components/home/Navbar";
+/**
+ * Showcase page [module: marketing / social proof]
+ * Displays a gallery of example AI-generated outfits to demonstrate the product.
+ */
+import Footer from "@/components/layout/Footer";
+import Navbar from "@/components/layout/Navbar";
 import Image from "next/image";
 
 export default function ShowcasePage() {

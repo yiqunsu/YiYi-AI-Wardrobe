@@ -1,3 +1,8 @@
+/**
+ * POST /api/locations/autocomplete [module: api / locations]
+ * Proxies the Google Places Autocomplete API to suggest location names
+ * as the user types in the location search input.
+ */
 import { NextRequest, NextResponse } from "next/server";
 
 const API_KEY = process.env.GOOGLE_WEATHER_API_KEY;

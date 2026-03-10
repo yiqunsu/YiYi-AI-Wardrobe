@@ -1,6 +1,11 @@
+/**
+ * POST /api/wardrobe/analyze [module: api / wardrobe]
+ * Triggers LLM (Gemini) analysis on a single wardrobe item identified by ID.
+ * Returns raw analysis attributes (category, warmth, formality, description) without saving.
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseClient } from "@/lib/supabase/server";
-import { analyzeWardrobeItem } from "@/lib/wardrobe/analyzeWardrobeItem";
+import { createSupabaseClient } from "@/lib/db/server";
+import { analyzeWardrobeItem } from "@/lib/wardrobe/wardrobe.service";
 
 export async function POST(request: NextRequest) {
   try {

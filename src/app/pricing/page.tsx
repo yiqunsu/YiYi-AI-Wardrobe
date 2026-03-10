@@ -1,5 +1,9 @@
-import Footer from "@/app/components/home/Footer";
-import Navbar from "@/app/components/home/Navbar";
+/**
+ * Pricing page [module: marketing / conversion]
+ * Displays subscription tiers, feature comparison, and plan CTAs.
+ */
+import Footer from "@/components/layout/Footer";
+import Navbar from "@/components/layout/Navbar";
 import Link from "next/link";
 
 export default function PricingPage() {

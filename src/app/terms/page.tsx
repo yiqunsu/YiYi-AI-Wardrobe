@@ -1,5 +1,9 @@
-import Navbar from "@/app/components/home/Navbar";
-import Footer from "@/app/components/home/Footer";
+/**
+ * Terms of service page [module: marketing / legal]
+ * Full text of the platform's terms and conditions for users.
+ */
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 
 export default function TermsPage() {
   return (

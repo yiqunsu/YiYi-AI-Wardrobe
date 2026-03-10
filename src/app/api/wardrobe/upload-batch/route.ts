@@ -1,6 +1,11 @@
+/**
+ * POST /api/wardrobe/upload-batch [module: api / wardrobe]
+ * Accepts up to 10 clothing image files, enforces wardrobe (50 items) and monthly (50 uploads) quotas.
+ * Optionally generates a clean product image via Gemini before storing in Supabase Storage.
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseClient } from "@/lib/supabase/server";
-import { generateProductImage } from "@/lib/image/generateProductImage";
+import { createSupabaseClient } from "@/lib/db/server";
+import { generateProductImage } from "@/lib/image/product.image";
 
 const BUCKET = "wardrobe-items";
 const MAX_FILES = 10;

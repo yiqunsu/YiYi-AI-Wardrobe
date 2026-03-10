@@ -1,8 +1,12 @@
+/**
+ * Model collection page [module: app / service / collection]
+ * Allows users to manage their virtual try-on avatar photos (upload, set default, delete).
+ */
 "use client";
 
 import { useState, useRef, useEffect, useCallback } from "react";
-import { useModels } from "@/app/contexts/ModelsContext";
-import type { ModelItem } from "@/app/contexts/ModelsContext";
+import { useModels } from "@/contexts/ModelsContext";
+import type { ModelItem } from "@/contexts/ModelsContext";
 
 /* ─────────────────────────────────────────────
    全图 Lightbox 弹窗

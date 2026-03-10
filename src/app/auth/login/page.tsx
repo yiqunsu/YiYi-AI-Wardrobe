@@ -1,9 +1,13 @@
+/**
+ * Login page [module: auth / sign-in]
+ * Renders the LoginForm (email/password) and RegisterForm side-by-side for returning and new users.
+ */
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
-import LoginForm from "@/app/components/auth/LoginForm";
-import RegisterForm from "@/app/components/auth/RegisterForm";
+import LoginForm from "@/components/auth/LoginForm";
+import RegisterForm from "@/components/auth/RegisterForm";
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);

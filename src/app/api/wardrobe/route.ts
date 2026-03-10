@@ -1,5 +1,10 @@
+/**
+ * GET /api/wardrobe [module: api / wardrobe]
+ * Returns the authenticated user's full wardrobe item list with 7-day signed image URLs.
+ * All signed URLs are generated in parallel for performance.
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseClient } from "@/lib/supabase/server";
+import { createSupabaseClient } from "@/lib/db/server";
 
 const BUCKET_WARDROBE_ITEMS = "wardrobe-items";
 const SIGNED_URL_EXPIRY = 60 * 60 * 24 * 7; // 7 days

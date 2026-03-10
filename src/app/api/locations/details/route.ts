@@ -1,3 +1,8 @@
+/**
+ * GET /api/locations/details [module: api / locations]
+ * Proxies the Google Places Details API to retrieve the formatted address
+ * and lat/lon coordinates for a place selected from autocomplete results.
+ */
 import { NextRequest, NextResponse } from "next/server";
 
 const API_KEY = process.env.GOOGLE_WEATHER_API_KEY;

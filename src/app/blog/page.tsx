@@ -1,5 +1,9 @@
-import Navbar from "@/app/components/home/Navbar";
-import Footer from "@/app/components/home/Footer";
+/**
+ * Blog page [module: marketing / content]
+ * Lists blog articles and updates about AI styling and the YiYi platform.
+ */
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 
 export default function BlogPage() {
   return (

@@ -1,9 +1,13 @@
+/**
+ * User settings page [module: app / account]
+ * Protected page for managing account preferences, profile details, and notification settings.
+ */
 "use client";
 
-import ProtectedRoute from "@/app/components/auth/ProtectedRoute";
-import Navbar from "@/app/components/home/Navbar";
-import Footer from "@/app/components/home/Footer";
-import { useAuth } from "@/app/contexts/AuthContext";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
+import { useAuth } from "@/contexts/AuthContext";
 
 function ComingSoonBadge() {
   return (

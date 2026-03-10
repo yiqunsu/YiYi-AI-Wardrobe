@@ -1,8 +1,12 @@
-import Footer from "@/app/components/home/Footer";
-import HeroIntro from "@/app/components/home/HeroIntro";
-import HowToUseSection from "@/app/components/home/HowToUseSection";
-import Navbar from "@/app/components/home/Navbar";
-import TrialInviteSection from "@/app/components/home/TrialInviteSection";
+/**
+ * Marketing homepage [module: marketing / landing page]
+ * Assembles the Hero, HowToUse, and TrialInvite sections into the public-facing landing page.
+ */
+import Footer from "@/components/layout/Footer";
+import HeroIntro from "@/components/home/HeroIntro";
+import HowToUseSection from "@/components/home/HowToUseSection";
+import Navbar from "@/components/layout/Navbar";
+import TrialInviteSection from "@/components/home/TrialInviteSection";
 
 export default function Home() {
   return (

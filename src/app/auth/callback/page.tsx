@@ -1,8 +1,13 @@
+/**
+ * OAuth callback page [module: auth / OAuth]
+ * Handles the redirect from Supabase after Google sign-in.
+ * Exchanges the auth code for a session and redirects the user to the dashboard.
+ */
 "use client";
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/db/client";
 
 export default function AuthCallback() {
   const router = useRouter();

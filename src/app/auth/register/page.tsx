@@ -1,7 +1,11 @@
+/**
+ * Register page [module: auth / sign-up]
+ * Renders the RegisterForm for new user account creation.
+ */
 "use client";
 
 import Link from "next/link";
-import RegisterForm from "@/app/components/auth/RegisterForm";
+import RegisterForm from "@/components/auth/RegisterForm";
 
 export default function RegisterPage() {
   return (

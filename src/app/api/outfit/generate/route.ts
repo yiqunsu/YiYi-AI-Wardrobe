@@ -1,10 +1,19 @@
+/**
+ * POST /api/outfit/generate [module: api / outfit]
+ * Core outfit generation pipeline (daily limit: 5 per user):
+ * 1. Fetch weather for location/date
+ * 2. Vector-search wardrobe for candidate items
+ * 3. LLM selects items and writes a style description
+ * 4. Gemini generates a virtual try-on or flat-lay image
+ * 5. Saves the result to outfit_generations history
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseClient } from "@/lib/supabase/server";
-import { getWeatherForLocation } from "@/lib/weather/getWeatherForLocation";
-import { searchWardrobeByEmbedding } from "@/lib/wardrobe/searchWardrobeByEmbedding";
-import { recommendOutfit } from "@/lib/outfit/recommendOutfit";
-import { generateOutfitImage } from "@/lib/image/generateOutfitImage";
-import { stitchImagesVertically } from "@/lib/image/stitchImages";
+import { createSupabaseClient } from "@/lib/db/server";
+import { getWeatherForLocation } from "@/lib/weather/weather.service";
+import { searchWardrobeByEmbedding } from "@/lib/wardrobe/wardrobe.embedding";
+import { recommendOutfit } from "@/lib/outfit/outfit.service";
+import { generateOutfitImage } from "@/lib/image/outfit.image";
+import { stitchImagesVertically } from "@/lib/image/image.utils";
 
 const BUCKET_WARDROBE = "wardrobe-items";
 const BUCKET_MODELS = "model-photos";
@@ -117,16 +126,19 @@ export async function POST(req: NextRequest) {
   }
 
   // ── 6. 生成穿搭图片 ──────────────────────────────────────
+  // Cap to 4 items for image generation — more items degrade Gemini output quality
+  const imageItemIds = selectedItemIds.slice(0, 4);
+
   let imageUrl: string | null = null;
   let resultImagePath: string | null = null;
 
-  if (selectedItemIds.length > 0) {
+  if (imageItemIds.length > 0) {
     try {
       // 6a. 获取选中单品的图片
       const { data: itemRows } = await supabase
         .from("wardrobe_items")
         .select("id, image_path")
-        .in("id", selectedItemIds);
+        .in("id", imageItemIds);
 
       const itemBuffers: Buffer[] = [];
       for (const row of (itemRows ?? []) as { id: string; image_path: string }[]) {

@@ -1,6 +1,11 @@
+/**
+ * POST /api/wardrobe/process-item [module: api / wardrobe]
+ * Runs the full processing pipeline for one wardrobe item:
+ * LLM analyze → validate metadata → save to DB → generate and store embedding vector.
+ */
 import { NextRequest, NextResponse } from "next/server";
-import { createSupabaseClient } from "@/lib/supabase/server";
-import { processOneWardrobeItem } from "@/lib/wardrobe/processOneWardrobeItem";
+import { createSupabaseClient } from "@/lib/db/server";
+import { processOneWardrobeItem } from "@/lib/wardrobe/wardrobe.service";
 
 /**
  * POST /api/wardrobe/process-item

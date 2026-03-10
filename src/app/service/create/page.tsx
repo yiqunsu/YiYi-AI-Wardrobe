@@ -1,8 +1,13 @@
+/**
+ * Outfit creation page [module: app / service / create]
+ * The main AI outfit generation interface where users input date, location, and occasion,
+ * then receive an AI-generated outfit recommendation with a virtual try-on image.
+ */
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import ServiceMain from "@/app/components/ai_service/ServiceMain";
-import { supabase } from "@/lib/supabase/client";
+import ServiceMain from "@/components/service/ServiceMain";
+import { supabase } from "@/lib/db/client";
 
 // 加载中依次循环展示的步骤提示
 const LOADING_STEPS = [

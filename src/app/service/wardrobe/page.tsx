@@ -1,14 +1,23 @@
+/**
+ * Wardrobe management page [module: app / service / wardrobe]
+ * Allows users to upload clothing photos in batch, browse their wardrobe by category,
+ * edit item names, and delete items.
+ *
+ * Data fetching uses TanStack Query (useQuery / useMutation) for stale-while-revalidate
+ * caching — wardrobe list is shown instantly from cache on re-visit, then refreshed in
+ * the background. Mutations call invalidateQueries to keep the cache consistent.
+ */
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
-import { useAuth } from "@/app/contexts/AuthContext";
-import { supabase } from "@/lib/supabase/client";
+import { useState, useRef, useCallback } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/db/client";
 import {
   updateWardrobeItem,
   deleteWardrobeItem,
-  type WardrobeItem,
-  type WardrobeCategory,
-} from "@/lib/supabase-data";
+} from "@/lib/db/queries/wardrobe.queries";
+import type { WardrobeItem, WardrobeCategory } from "@/types/wardrobe.types";
 
 const MAX_BATCH_FILES = 10;
 
@@ -40,10 +49,11 @@ const PROCESS_CONCURRENCY = 3;
 
 export default function WardrobePage() {
   const { user } = useAuth();
-  const [items, setItems] = useState<WardrobeItem[]>([]);
+  const queryClient = useQueryClient();
+  const queryKey = ["wardrobe", user?.id ?? null];
+
   const [selectedCategory, setSelectedCategory] = useState<FilterCategory>("all");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
   const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>("idle");
@@ -60,24 +70,22 @@ export default function WardrobePage() {
     warmth: number;
     formality: number;
   }>({ name: "", category: "tops", warmth: 3, formality: 3 });
-  const [savingEdit, setSavingEdit] = useState(false);
   const [deleteConfirmItem, setDeleteConfirmItem] = useState<WardrobeItem | null>(null);
 
-  const load = useCallback(async () => {
-    if (!user?.id) {
-      setItems([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    setError(null);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-      if (!token) {
-        setItems([]);
-        return;
-      }
+  const getToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? null;
+  }, []);
+
+  const {
+    data: items = [],
+    isFetching,
+    error: queryError,
+  } = useQuery({
+    queryKey,
+    queryFn: async (): Promise<WardrobeItem[]> => {
+      const token = await getToken();
+      if (!token) return [];
       const res = await fetch("/api/wardrobe", {
         headers: { Authorization: `Bearer ${token}` },
       });
@@ -87,23 +95,24 @@ export default function WardrobePage() {
       }
       const data = await res.json();
       const list = Array.isArray(data?.items) ? data.items : [];
-      setItems(
-        list.map((item: Omit<WardrobeItem, "uploadedAt"> & { uploadedAt: string }) => ({
+      return list.map(
+        (item: Omit<WardrobeItem, "uploadedAt"> & { uploadedAt: string }) => ({
           ...item,
           uploadedAt: new Date(item.uploadedAt),
-        }))
+        })
       );
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load wardrobe");
-      setItems([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [user?.id]);
+    },
+    enabled: !!user?.id,
+  });
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loading = isFetching && items.length === 0;
+  const error =
+    pageError ??
+    (queryError instanceof Error
+      ? queryError.message
+      : queryError
+      ? String(queryError)
+      : null);
 
   const filteredItems =
     selectedCategory === "all"
@@ -121,7 +130,7 @@ export default function WardrobePage() {
     setBatchResult(null);
     setUploadWarnings([]);
     setUploadPhase("idle");
-    setError(null);
+    setPageError(null);
   };
 
   /** 弹窗内「点击上传」：触发文件选择，可多次添加（批量） */
@@ -143,7 +152,7 @@ export default function WardrobePage() {
           previewUrl: URL.createObjectURL(file),
         }));
       if (toAdd.length < imageFiles.length) {
-        setError(`最多 ${MAX_BATCH_FILES} 张，部分未加入。`);
+        setPageError(`Maximum ${MAX_BATCH_FILES} images allowed. Some files were not added.`);
       }
       return [...prev, ...toAdd].slice(0, MAX_BATCH_FILES);
     });
@@ -173,8 +182,7 @@ export default function WardrobePage() {
   const confirmBatchUpload = async () => {
     if (pendingFiles.length === 0 || !user?.id) return;
 
-    const { data: { session } } = await supabase.auth.getSession();
-    const token = session?.access_token;
+    const token = await getToken();
     if (!token) {
       setBatchError("Not signed in");
       return;
@@ -256,20 +264,37 @@ export default function WardrobePage() {
 
       setUploadPhase("done");
       setBatchResult({ success, failed });
-      await load();
+      queryClient.invalidateQueries({ queryKey });
     } catch (e) {
       setBatchError(e instanceof Error ? e.message : "Request failed");
       setUploadPhase("idle");
     }
   };
 
+  const deleteItemMutation = useMutation({
+    mutationFn: (id: string) => deleteWardrobeItem(id),
+    onMutate: async (id) => {
+      await queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<WardrobeItem[]>(queryKey);
+      queryClient.setQueryData<WardrobeItem[]>(queryKey, (old = []) =>
+        old.filter((i) => i.id !== id)
+      );
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+      setPageError("Delete failed");
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey });
+    },
+  });
+
   const handleRemove = (id: string) => {
-    setError(null);
-    deleteWardrobeItem(id)
-      .then(() => setItems((prev) => prev.filter((i) => i.id !== id)))
-      .catch((e) => {
-        setError(e instanceof Error ? e.message : "Delete failed");
-      });
+    setPageError(null);
+    deleteItemMutation.mutate(id);
   };
 
   const openEditModal = (item: WardrobeItem) => {
@@ -290,14 +315,16 @@ export default function WardrobePage() {
     setEditModalItem(null);
   };
 
-  const saveEditModal = async () => {
-    if (!editModalItem) return;
-    setSavingEdit(true);
-    setError(null);
-    try {
-      await updateWardrobeItem(editModalItem.id, {});
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+  const saveEditMutation = useMutation({
+    mutationFn: async ({
+      item,
+      draft,
+    }: {
+      item: WardrobeItem;
+      draft: { name: string; category: WardrobeCategory; warmth: number; formality: number };
+    }) => {
+      await updateWardrobeItem(item.id, {});
+      const token = await getToken();
       if (token) {
         const res = await fetch("/api/wardrobe/update-metadata", {
           method: "PATCH",
@@ -306,12 +333,12 @@ export default function WardrobePage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            wardrobeItemId: editModalItem.id,
+            wardrobeItemId: item.id,
             metadata: {
-              category: editDraft.category,
-              warmth: editDraft.warmth,
-              formality: editDraft.formality,
-              description: editModalItem.metadata?.description ?? "",
+              category: draft.category,
+              warmth: draft.warmth,
+              formality: draft.formality,
+              description: item.metadata?.description ?? "",
             },
           }),
         });
@@ -320,13 +347,22 @@ export default function WardrobePage() {
           throw new Error(j?.error ?? "Failed to update metadata");
         }
       }
-      await load();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey });
       setEditModalItem(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
-    } finally {
-      setSavingEdit(false);
-    }
+    },
+    onError: (e) => {
+      setPageError(e instanceof Error ? e.message : "Save failed");
+    },
+  });
+
+  const savingEdit = saveEditMutation.isPending;
+
+  const saveEditModal = async () => {
+    if (!editModalItem) return;
+    setPageError(null);
+    saveEditMutation.mutate({ item: editModalItem, draft: editDraft });
   };
 
   return (

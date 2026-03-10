@@ -1,10 +1,14 @@
+/**
+ * User dashboard page [module: app / overview]
+ * Protected page giving the authenticated user a summary of their wardrobe and recent outfits.
+ */
 "use client";
 
-import ProtectedRoute from "@/app/components/auth/ProtectedRoute";
-import { useAuth } from "@/app/contexts/AuthContext";
+import ProtectedRoute from "@/components/auth/ProtectedRoute";
+import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
-import Navbar from "@/app/components/home/Navbar";
-import Footer from "@/app/components/home/Footer";
+import Navbar from "@/components/layout/Navbar";
+import Footer from "@/components/layout/Footer";
 
 const quickLinks = [
   {
