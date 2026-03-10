@@ -18,6 +18,7 @@ import {
   deleteWardrobeItem,
 } from "@/lib/db/queries/wardrobe.queries";
 import type { WardrobeItem, WardrobeCategory } from "@/types/wardrobe.types";
+import { compressImageFile } from "@/lib/image/compress.client";
 
 const MAX_BATCH_FILES = 10;
 
@@ -195,8 +196,13 @@ export default function WardrobePage() {
     setUploadProgress({ completed: 0, total: pendingFiles.length });
 
     try {
+      // Compress each image client-side before sending to keep the total
+      // FormData payload under Vercel's 4.5 MB request-body limit.
       const formData = new FormData();
-      pendingFiles.forEach(({ file }) => formData.append("files", file));
+      for (const { file } of pendingFiles) {
+        const compressed = await compressImageFile(file);
+        formData.append("files", compressed);
+      }
 
       const uploadRes = await fetch("/api/wardrobe/upload-batch", {
         method: "POST",
