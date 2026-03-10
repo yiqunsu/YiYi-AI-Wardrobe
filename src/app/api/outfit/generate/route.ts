@@ -14,6 +14,7 @@ import { searchWardrobeByEmbedding } from "@/lib/wardrobe/wardrobe.embedding";
 import { recommendOutfit } from "@/lib/outfit/outfit.service";
 import { generateOutfitImage } from "@/lib/image/outfit.image";
 import { stitchImagesVertically } from "@/lib/image/image.utils";
+import { logUsage } from "@/lib/analytics/usage.logger";
 
 const BUCKET_WARDROBE = "wardrobe-items";
 const BUCKET_MODELS = "model-photos";
@@ -58,7 +59,16 @@ export async function POST(req: NextRequest) {
   } = await supabase.auth.getUser(token);
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  // ── 2. 配额检查：每日最多 5 次 ──────────────────────────
+  // ── 2. 配额检查（支持 user_settings 覆盖）──────────────
+  const { data: userSettings } = await supabase
+    .from("user_settings")
+    .select("outfit_daily_limit")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const outfitDailyLimit =
+    (userSettings as { outfit_daily_limit?: number } | null)?.outfit_daily_limit ?? 5;
+
   const todayStart = new Date();
   todayStart.setUTCHours(0, 0, 0, 0);
   const todayEnd = new Date();
@@ -71,9 +81,10 @@ export async function POST(req: NextRequest) {
     .gte("created_at", todayStart.toISOString())
     .lte("created_at", todayEnd.toISOString());
 
-  if ((todayCount ?? 0) >= 5) {
+  if ((todayCount ?? 0) >= outfitDailyLimit) {
+    logUsage({ userId: user.id, action: "outfit_generate", status: "quota_exceeded" });
     return NextResponse.json(
-      { error: "Daily limit reached. You can generate up to 5 outfits per day." },
+      { error: `Daily limit reached. You can generate up to ${outfitDailyLimit} outfits per day.` },
       { status: 429 }
     );
   }
@@ -107,7 +118,6 @@ export async function POST(req: NextRequest) {
   // ── 5. LLM 穿搭推荐 ──────────────────────────────────────
   let selectedItemIds: string[] = [];
   let message = "";
-  let imagePrompt = "";
 
   try {
     const result = await recommendOutfit({
@@ -119,9 +129,14 @@ export async function POST(req: NextRequest) {
     });
     selectedItemIds = result.selectedItemIds;
     message = result.message;
-    imagePrompt = result.imagePrompt;
   } catch (e) {
     const msg = e instanceof Error ? e.message : "LLM error";
+    logUsage({
+      userId: user.id,
+      action: "outfit_generate",
+      status: "error",
+      metadata: { error_msg: msg, occasion },
+    });
     return NextResponse.json({ error: `Outfit recommendation failed: ${msg}` }, { status: 502 });
   }
 
@@ -173,7 +188,7 @@ export async function POST(req: NextRequest) {
       // 6c. 将多张衣服图拼接成一张长图，再与模特图一起传入 Gemini
       if (itemBuffers.length > 0) {
         const stitchedBuffer = await stitchImagesVertically(itemBuffers);
-        const outfitBuffer = await generateOutfitImage(modelBuffer, [stitchedBuffer], imagePrompt);
+        const outfitBuffer = await generateOutfitImage(modelBuffer, [stitchedBuffer], message);
 
         // 6d. 上传至 generated-outfits bucket
         const imagePath = `${user.id}/${crypto.randomUUID()}.png`;
@@ -211,7 +226,7 @@ export async function POST(req: NextRequest) {
         additional_notes: additionalNotes || null,
         result_image_path: resultImagePath,
         result_message: message,
-        result_description: imagePrompt,
+        result_description: message,
         selected_item_ids: selectedItemIds,
         is_liked: false,
       })
@@ -223,6 +238,13 @@ export async function POST(req: NextRequest) {
     console.error("[outfit/generate] History save error:", e);
   }
 
-  // ── 8. 返回结果 ──────────────────────────────────────────
-  return NextResponse.json({ imageUrl, message, description: imagePrompt, selectedItemIds, generationId });
+  // ── 8. 记录成功日志 + 返回结果 ───────────────────────────
+  logUsage({
+    userId: user.id,
+    action: "outfit_generate",
+    status: "success",
+    metadata: { occasion, selected_items: selectedItemIds.length, has_image: !!imageUrl },
+  });
+
+  return NextResponse.json({ imageUrl, message, description: message, selectedItemIds, generationId });
 }

@@ -32,6 +32,17 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** Keeps a lightweight hint cookie in sync with the Supabase session so
+ *  the Edge middleware can redirect unauthenticated users server-side. */
+function syncSessionCookie(hasSession: boolean) {
+  if (typeof document === "undefined") return;
+  if (hasSession) {
+    document.cookie = "yiyi-has-session=1; path=/; SameSite=Lax; max-age=604800";
+  } else {
+    document.cookie = "yiyi-has-session=; path=/; SameSite=Lax; max-age=0";
+  }
+}
+
 const transformUser = (supabaseUser: SupabaseUser | null): User | null => {
   if (!supabaseUser) return null;
   return {
@@ -50,6 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(transformUser(session?.user ?? null));
+      syncSessionCookie(!!session);
       setLoading(false);
     });
 
@@ -58,6 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(
       (_event: AuthChangeEvent, session: Session | null) => {
         setUser(transformUser(session?.user ?? null));
+        syncSessionCookie(!!session);
         setLoading(false);
       }
     );

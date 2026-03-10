@@ -14,12 +14,7 @@ export const outfitRecommendationSchema = z.object({
   message: z
     .string()
     .describe(
-      "Short, warm reply to the user explaining your outfit choice (1-4 sentences)."
-    ),
-  imagePrompt: z
-    .string()
-    .describe(
-      "Detailed English prompt for one outfit image: flat lay or catalog shot of the selected garments only, no people. Include colors, textures, composition, lighting."
+      "A friendly message to the user (2-4 sentences). Briefly mention date/weather, explain why these items were chosen (color harmony, occasion fit, layering), and describe the overall style vibe."
     ),
 });
 

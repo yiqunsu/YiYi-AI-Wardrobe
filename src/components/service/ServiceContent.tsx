@@ -8,6 +8,7 @@
 
 import DesignForm from "./DesignForm";
 import MagicMirror from "./MagicMirror";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 interface ServiceContentProps {
   formData: {
@@ -50,12 +51,14 @@ const ServiceContent = ({
 
       {/* 右侧结果展示区域：限制最大宽度使魔镜更窄，flex 列 + 子元素填满 */}
       <div className="flex-1 w-full max-w-[420px] flex flex-col min-h-0">
-        <MagicMirror
-          generatedOutfit={generatedOutfit}
-          isGenerating={isGenerating}
-          generatingStep={generatingStep}
-          error={error}
-        />
+        <ErrorBoundary>
+          <MagicMirror
+            generatedOutfit={generatedOutfit}
+            isGenerating={isGenerating}
+            generatingStep={generatingStep}
+            error={error}
+          />
+        </ErrorBoundary>
       </div>
     </div>
   );

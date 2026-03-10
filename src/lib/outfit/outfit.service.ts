@@ -29,7 +29,6 @@ export interface RecommendOutfitInput {
 export interface RecommendOutfitResult extends OutfitRecommendationSchema {
   selectedItemIds: string[];
   message: string;
-  imagePrompt: string;
 }
 
 function buildContextBlock(input: RecommendOutfitInput): string {
@@ -109,6 +108,5 @@ export async function recommendOutfit(
   return {
     selectedItemIds: result.selectedItemIds ?? [],
     message: result.message ?? "",
-    imagePrompt: result.imagePrompt ?? "",
   };
 }

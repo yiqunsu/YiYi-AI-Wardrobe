@@ -323,18 +323,6 @@ const MagicMirror = ({ generatedOutfit, isGenerating, generatingStep, error }: M
                 </section>
               )}
 
-              {/* Style 描述 */}
-              {generatedOutfit.description && (
-                <section>
-                  <p className="text-xs font-bold uppercase tracking-widest text-[#8B4513] mb-3">
-                    Styling Description
-                  </p>
-                  <p className="text-sm text-[#5C4033] leading-relaxed">
-                    {generatedOutfit.description}
-                  </p>
-                </section>
-              )}
-
               {/* 选中单品图片 */}
               {generatedOutfit.selectedItems && generatedOutfit.selectedItems.length > 0 && (
                 <section>

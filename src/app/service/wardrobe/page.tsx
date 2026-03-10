@@ -44,8 +44,7 @@ type PendingFile = { file: File; id: string; previewUrl: string };
 type UploadPhase = "idle" | "uploading" | "processing" | "done";
 type BatchResult = { success: string[]; failed: { id: string; error: string }[] };
 type ProcessProgress = { completed: number; total: number };
-
-const PROCESS_CONCURRENCY = 3;
+type UploadProgress = { completed: number; total: number };
 
 export default function WardrobePage() {
   const { user } = useAuth();
@@ -60,6 +59,7 @@ export default function WardrobePage() {
   const [batchError, setBatchError] = useState<string | null>(null);
   const [batchResult, setBatchResult] = useState<BatchResult | null>(null);
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([]);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgress>({ completed: 0, total: 0 });
   const [processProgress, setProcessProgress] = useState<ProcessProgress>({ completed: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -130,6 +130,7 @@ export default function WardrobePage() {
     setBatchResult(null);
     setUploadWarnings([]);
     setUploadPhase("idle");
+    setUploadProgress({ completed: 0, total: 0 });
     setPageError(null);
   };
 
@@ -177,6 +178,7 @@ export default function WardrobePage() {
     setBatchError(null);
     setBatchResult(null);
     setUploadWarnings([]);
+    setUploadProgress({ completed: 0, total: 0 });
   };
 
   const confirmBatchUpload = async () => {
@@ -190,6 +192,7 @@ export default function WardrobePage() {
 
     setBatchError(null);
     setUploadPhase("uploading");
+    setUploadProgress({ completed: 0, total: pendingFiles.length });
 
     try {
       const formData = new FormData();
@@ -201,19 +204,55 @@ export default function WardrobePage() {
         body: formData,
       });
 
-      const uploadJson = await uploadRes.json();
-      if (!uploadRes.ok) {
-        setBatchError(uploadJson?.error ?? "Upload failed");
+      // Validation errors (4xx / 5xx before streaming starts) come back as plain JSON.
+      if (!uploadRes.ok || !uploadRes.body) {
+        const j = await uploadRes.json().catch(() => ({}));
+        setBatchError(j?.error ?? "Upload failed");
         setUploadPhase("idle");
         return;
       }
 
-      const wardrobeItemIds = uploadJson.wardrobeItemIds as string[];
-      if (Array.isArray(uploadJson.warnings) && uploadJson.warnings.length > 0) {
-        setUploadWarnings(uploadJson.warnings);
-      } else {
-        setUploadWarnings([]);
+      // Read the NDJSON stream and update upload progress in real-time.
+      const uploadReader = uploadRes.body.getReader();
+      const uploadDecoder = new TextDecoder();
+      let uploadBuffer = "";
+      let wardrobeItemIds: string[] = [];
+
+      uploadOuter: while (true) {
+        const { done, value } = await uploadReader.read();
+        if (value) uploadBuffer += uploadDecoder.decode(value, { stream: true });
+        if (done) uploadBuffer += uploadDecoder.decode();
+
+        const lines = uploadBuffer.split("\n");
+        uploadBuffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line) as Record<string, unknown>;
+            if (event.type === "progress") {
+              setUploadProgress({
+                completed: event.completed as number,
+                total: event.total as number,
+              });
+            } else if (event.type === "done") {
+              wardrobeItemIds = (event.wardrobeItemIds as string[]) ?? [];
+              const w = event.warnings as string[] | undefined;
+              setUploadWarnings(Array.isArray(w) && w.length > 0 ? w : []);
+              break uploadOuter;
+            } else if (event.type === "error") {
+              setBatchError((event.error as string) ?? "Upload failed");
+              setUploadPhase("idle");
+              return;
+            }
+          } catch {
+            // skip malformed lines
+          }
+        }
+
+        if (done) break;
       }
+
       if (!Array.isArray(wardrobeItemIds) || wardrobeItemIds.length === 0) {
         setUploadPhase("done");
         setBatchResult({ success: [], failed: [] });
@@ -223,43 +262,66 @@ export default function WardrobePage() {
       setUploadPhase("processing");
       setProcessProgress({ completed: 0, total: wardrobeItemIds.length });
 
+      // Send all IDs to the server in one request.  The server streams back
+      // NDJSON progress events while the global concurrency limiter gates
+      // actual Gemini calls to ≤ GEMINI_CONCURRENCY across all users.
+      const processRes = await fetch("/api/wardrobe/process-batch", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ wardrobeItemIds }),
+      });
+
+      if (!processRes.ok || !processRes.body) {
+        const j = await processRes.json().catch(() => ({}));
+        setBatchError(j?.error ?? "Processing failed");
+        setUploadPhase("idle");
+        return;
+      }
+
+      const reader = processRes.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
       const success: string[] = [];
       const failed: { id: string; error: string }[] = [];
-      const counter = { value: 0 };
 
-      for (let i = 0; i < wardrobeItemIds.length; i += PROCESS_CONCURRENCY) {
-        const chunk = wardrobeItemIds.slice(i, i + PROCESS_CONCURRENCY);
-        await Promise.all(
-          chunk.map(async (id) => {
-            try {
-              const res = await fetch("/api/wardrobe/process-item", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: `Bearer ${token}`,
-                },
-                body: JSON.stringify({ wardrobeItemId: id }),
-              });
-              if (res.ok) {
-                success.push(id);
+      outer: while (true) {
+        const { done, value } = await reader.read();
+        if (value) buffer += decoder.decode(value, { stream: true });
+        // Flush remaining bytes on stream end
+        if (done) buffer += decoder.decode();
+
+        const lines = buffer.split("\n");
+        // Keep the last (possibly incomplete) line in the buffer
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line) as Record<string, unknown>;
+            if (event.type === "progress") {
+              const completed = event.completed as number;
+              const total = event.total as number;
+              setProcessProgress({ completed, total });
+              if (event.ok) {
+                success.push(event.id as string);
               } else {
-                const j = await res.json().catch(() => ({}));
-                failed.push({ id, error: j?.error ?? "Processing failed" });
+                failed.push({
+                  id: event.id as string,
+                  error: (event.error as string) ?? "Processing failed",
+                });
               }
-            } catch (e) {
-              failed.push({
-                id,
-                error: e instanceof Error ? e.message : "Unknown error",
-              });
-            } finally {
-              counter.value += 1;
-              setProcessProgress({
-                completed: counter.value,
-                total: wardrobeItemIds.length,
-              });
+            } else if (event.type === "done") {
+              break outer;
             }
-          })
-        );
+          } catch {
+            // skip malformed lines
+          }
+        }
+
+        if (done) break;
       }
 
       setUploadPhase("done");
@@ -483,18 +545,34 @@ export default function WardrobePage() {
                   </>
                 )}
                 {uploadPhase === "uploading" && (
-                  <div className="flex flex-col items-center justify-center py-10 gap-4">
-                    <div className="relative w-16 h-16 flex items-center justify-center">
-                      <span className="material-symbols-outlined text-5xl text-[#8B4513] animate-spin">
-                        progress_activity
-                      </span>
-                    </div>
+                  <div className="flex flex-col items-center justify-center py-10 gap-6 w-full">
                     <div className="text-center">
-                      <p className="font-semibold text-[#171412]">
-                        Uploading {pendingFiles.length} photo{pendingFiles.length > 1 ? "s" : ""}…
+                      <span className="material-symbols-outlined text-5xl text-[#8B4513] mb-3 block animate-spin">
+                        cloud_upload
+                      </span>
+                      <p className="font-semibold text-[#171412]">Uploading images…</p>
+                      <p className="text-sm text-stone-500 mt-1">
+                        {uploadProgress.completed} / {uploadProgress.total} uploaded
                       </p>
-                      <p className="text-sm text-stone-500 mt-1">Please wait while we upload your images</p>
                     </div>
+                    {uploadProgress.total > 0 && (
+                      <div className="w-full px-2">
+                        <div className="w-full bg-[#EDE0D4] rounded-full h-3 overflow-hidden">
+                          <div
+                            className="bg-[#8B5E3C] h-3 rounded-full transition-all duration-500 ease-out"
+                            style={{
+                              width: `${Math.round((uploadProgress.completed / uploadProgress.total) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="flex justify-between mt-1.5">
+                          <p className="text-xs text-stone-500">Saving to wardrobe…</p>
+                          <p className="text-xs font-medium text-[#8B5E3C]">
+                            {Math.round((uploadProgress.completed / uploadProgress.total) * 100)}%
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
                 {uploadPhase === "processing" && (
@@ -743,18 +821,58 @@ export default function WardrobePage() {
 
         {/* Wardrobe grid */}
         {loading ? (
-          <div className="rounded-2xl border border-[#C9B89C] bg-[#EDE0D4]/30 p-16 text-center">
-            <p className="text-stone-600">Loading wardrobe...</p>
+          /* Loading skeleton */
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            {Array.from({ length: 10 }).map((_, i) => (
+              <div key={i} className="rounded-xl overflow-hidden border border-[#C9B89C] bg-white">
+                <div className="aspect-square bg-[#EDE0D4] animate-pulse" />
+                <div className="px-2 py-1.5">
+                  <div className="h-3 w-12 mx-auto bg-[#EDE0D4] rounded animate-pulse" />
+                </div>
+              </div>
+            ))}
           </div>
-        ) : filteredItems.length === 0 ? (
-          <div className="rounded-2xl border border-[#C9B89C] bg-[#EDE0D4]/30 p-16 text-center">
-            <span className="material-symbols-outlined text-6xl text-[#8B4513]/40 mb-4 block">
+        ) : items.length === 0 ? (
+          /* Empty wardrobe — first-time onboarding */
+          <div className="rounded-2xl border-2 border-dashed border-[#C9B89C] bg-[#EDE0D4]/30 py-20 px-8 text-center">
+            <span className="material-symbols-outlined text-7xl text-[#8B4513]/30 mb-6 block">
               checkroom
             </span>
-            <p className="text-stone-600">
-              {items.length === 0
-                ? "No items yet. Upload your first piece!"
-                : `No items in "${selectedCategory}" category.`}
+            <h3 className="text-xl font-bold text-[#171412] mb-2">Your wardrobe is empty</h3>
+            <p className="text-stone-500 text-sm max-w-sm mx-auto mb-8">
+              Upload your first clothing photos and YiYi will analyze them with AI — ready to create personalized outfits for you.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center items-center text-sm text-stone-400 mb-8">
+              {[
+                { icon: "cloud_upload", text: "Upload photos" },
+                { icon: "auto_awesome", text: "AI analyzes style" },
+                { icon: "checkroom", text: "Get outfit ideas" },
+              ].map(({ icon, text }, i) => (
+                <div key={i} className="flex items-center gap-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className="material-symbols-outlined text-[#8B4513]/60">{icon}</span>
+                    <span>{text}</span>
+                  </div>
+                  {i < 2 && <span className="hidden sm:block text-[#C9B89C]">→</span>}
+                </div>
+              ))}
+            </div>
+            <button
+              onClick={openUploadModal}
+              className="px-8 py-3 bg-[#8B4513] text-white font-bold rounded-xl hover:bg-[#A0522D] transition-colors shadow-md"
+            >
+              Upload Your First Piece
+            </button>
+          </div>
+        ) : filteredItems.length === 0 ? (
+          /* Empty category filter */
+          <div className="rounded-2xl border border-[#C9B89C] bg-[#EDE0D4]/30 p-16 text-center">
+            <span className="material-symbols-outlined text-6xl text-[#8B4513]/40 mb-4 block">
+              filter_list_off
+            </span>
+            <p className="font-semibold text-[#171412] mb-1">No items in this category</p>
+            <p className="text-stone-500 text-sm">
+              Switch to &ldquo;All&rdquo; or upload clothes in the &ldquo;{selectedCategory}&rdquo; category.
             </p>
           </div>
         ) : (

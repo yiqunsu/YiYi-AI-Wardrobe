@@ -1,72 +1,113 @@
 /**
  * POST /api/wardrobe/process-batch [module: api / wardrobe]
- * Processes up to 10 wardrobe items in parallel (capped by CONCURRENCY limit).
- * Returns separate success and failed ID lists so the client can retry failures.
+ *
+ * Accepts up to 10 wardrobe item IDs and processes each one through the global
+ * Gemini concurrency limiter (see src/lib/queue/gemini.queue.ts).  Results are
+ * streamed back as newline-delimited JSON (NDJSON) so the client can update its
+ * progress bar in real-time without polling.
+ *
+ * Stream event shapes:
+ *   {"type":"progress","id":"…","ok":true,"completed":1,"total":5}
+ *   {"type":"progress","id":"…","ok":false,"error":"…","completed":2,"total":5}
+ *   {"type":"done","success":["…"],"failed":[{"id":"…","error":"…"}]}
+ *
+ * Concurrency is controlled globally by `geminiLimit` — all users share the
+ * same pool, so sending 10 items from 5 concurrent users will never exceed the
+ * configured cap (default: 3 simultaneous Gemini calls).
  */
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { createSupabaseClient } from "@/lib/db/server";
 import { processOneWardrobeItem } from "@/lib/wardrobe/wardrobe.service";
+import { geminiLimit } from "@/lib/queue/gemini.queue";
 
 const MAX_IDS = 10;
-/** 同一时刻最多并行处理几条，避免 Gemini 限流 */
-const CONCURRENCY = 10;
 
-/**
- * POST /api/wardrobe/process-batch
- * Body: { wardrobeItemIds: string[] }
- * 对每个 id 并行执行（上限 CONCURRENCY）：LLM 分析 → 校验 → 存 metadata → embedding → 写 Vector 表
- * 返回 { success: string[], failed: { id: string, error: string }[] }
- */
 export async function POST(request: NextRequest) {
-  try {
-    const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
-    if (!token) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
+  if (!token) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 
+  let ids: string[];
+  try {
     const body = await request.json();
     const raw = body?.wardrobeItemIds;
-    const ids = Array.isArray(raw)
+    ids = Array.isArray(raw)
       ? (raw as unknown[]).filter((id): id is string => typeof id === "string")
       : [];
-
-    if (ids.length === 0) {
-      return NextResponse.json({ error: "Missing or invalid wardrobeItemIds" }, { status: 400 });
-    }
-    if (ids.length > MAX_IDS) {
-      return NextResponse.json(
-        { error: `At most ${MAX_IDS} items per batch` },
-        { status: 400 }
-      );
-    }
-
-    const supabase = createSupabaseClient(token);
-    const success: string[] = [];
-    const failed: { id: string; error: string }[] = [];
-
-    for (let i = 0; i < ids.length; i += CONCURRENCY) {
-      const chunk = ids.slice(i, i + CONCURRENCY);
-      const results = await Promise.all(
-        chunk.map(async (id) => {
-          try {
-            await processOneWardrobeItem(supabase, id);
-            return { ok: true as const, id };
-          } catch (e) {
-            return {
-              ok: false as const,
-              id,
-              error: e instanceof Error ? e.message : "Unknown error",
-            };
-          }
-        })
-      );
-      for (const r of results) {
-        if (r.ok) success.push(r.id);
-        else failed.push({ id: r.id, error: r.error });
-      }
-    }
-
-    return NextResponse.json({ success, failed });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : "Internal server error";
-    return NextResponse.json({ error: msg }, { status: 500 });
+  } catch {
+    return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
+
+  if (ids.length === 0) {
+    return new Response(JSON.stringify({ error: "Missing or invalid wardrobeItemIds" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  if (ids.length > MAX_IDS) {
+    return new Response(
+      JSON.stringify({ error: `At most ${MAX_IDS} items per batch` }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
+  }
+
+  const supabase = createSupabaseClient(token);
+  const total = ids.length;
+  const enc = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const success: string[] = [];
+      const failed: { id: string; error: string }[] = [];
+      let completed = 0;
+
+      // Submit all items to the global limiter at once.
+      // The limiter ensures at most GEMINI_CONCURRENCY tasks run in parallel
+      // across ALL users hitting this server simultaneously.
+      await Promise.all(
+        ids.map((id) =>
+          geminiLimit(async () => {
+            let ok = false;
+            let errorMsg = "";
+            try {
+              await processOneWardrobeItem(supabase, id);
+              ok = true;
+              success.push(id);
+            } catch (e) {
+              errorMsg = e instanceof Error ? e.message : "Unknown error";
+              failed.push({ id, error: errorMsg });
+            }
+            completed += 1;
+
+            const event = ok
+              ? { type: "progress", id, ok: true, completed, total }
+              : { type: "progress", id, ok: false, error: errorMsg, completed, total };
+
+            controller.enqueue(enc.encode(JSON.stringify(event) + "\n"));
+          })
+        )
+      );
+
+      controller.enqueue(
+        enc.encode(JSON.stringify({ type: "done", success, failed }) + "\n")
+      );
+      controller.close();
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/x-ndjson",
+      "Cache-Control": "no-cache",
+      "X-Accel-Buffering": "no",
+    },
+  });
 }

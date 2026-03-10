@@ -35,23 +35,37 @@ async function imageUrlToBase64(imageUrl: string): Promise<{
   return { data: base64, mimeType };
 }
 
-async function withRetry<T>(
-  fn: () => Promise<T>,
-  count: number = llmConfig.retryCount,
-  delayMs: number = llmConfig.retryDelayMs
-): Promise<T> {
-  let lastError: Error | null = null;
-  for (let i = 0; i <= count; i++) {
+/** Returns true when the error is a Gemini rate-limit / quota error. */
+function isRateLimitError(e: unknown): boolean {
+  const msg = e instanceof Error ? e.message : String(e);
+  return (
+    msg.includes("429") ||
+    msg.includes("RESOURCE_EXHAUSTED") ||
+    msg.includes("quota") ||
+    msg.includes("rate")
+  );
+}
+
+/**
+ * Retries `fn` up to `maxRetries` times with exponential backoff.
+ * Rate-limit errors (429 / RESOURCE_EXHAUSTED) use a longer base delay
+ * (2 s → 4 s → 8 s → 16 s) with ±500 ms jitter.
+ * Other transient errors use a shorter base delay (500 ms → 1 s → 2 s → 4 s).
+ */
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 4): Promise<T> {
+  let lastError: Error = new Error("Unknown error");
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
-      if (i < count) {
-        await new Promise((r) => setTimeout(r, delayMs));
-      }
+      if (attempt === maxRetries) break;
+      const base = isRateLimitError(e) ? 2000 : 500;
+      const delay = base * 2 ** attempt + Math.random() * 500;
+      await new Promise((r) => setTimeout(r, delay));
     }
   }
-  throw lastError ?? new Error("Unknown error");
+  throw lastError;
 }
 
 /**

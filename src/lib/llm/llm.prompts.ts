@@ -49,9 +49,13 @@ Field definitions and rules:
 - 5 = very formal (e.g. suit, blazer, dress shoes). Do NOT default to 3; choose based on the actual item.
 
 4. description:
-- A concise natural language description of the clothing item.
-- Describe visible features such as material, color, fit, and style.
-- Do NOT include subjective opinions or emojis.
+- A structured one-line description using this exact format:
+  "[color] [material/fabric] [garment type], [fit/silhouette], [key style detail]"
+- Examples:
+  - "Navy blue cotton slim-fit chinos, tapered leg, minimal with side pockets"
+  - "Oversized cream wool knit sweater, relaxed fit, ribbed hem and cuffs"
+  - "Black leather chelsea boots, ankle-height, elastic side panel and block heel"
+- Keep it under 50 words. No emojis, no subjective opinions.
 
 Output only the JSON object.`;
 
@@ -106,8 +110,7 @@ export const OUTFIT_RECOMMENDATION_OUTPUT_INSTRUCTIONS = `Return a JSON object w
 
 {
   "selectedItemIds": string[],
-  "message": string,
-  "imagePrompt": string
+  "message": string
 }
 
 selectedItemIds: 
@@ -116,21 +119,9 @@ selectedItemIds:
 - Select at most 4 items. Prioritize: 1 top or outerwear, 1 bottom, 1 shoes, optionally 1 accessory.
 
 message: 
-- A friendly message introducing the outfit choice.
-- Mention the date and weather briefly if available.
-- Example: "Hi! Today is 3/9, it's sunny and around 20°C. I picked this formal suit from the wardrobe for yourupcoming business meeting."
-
-imagePrompt:
-- Write a structured English description including:
-  - colors: main colors and complements (short phrase)
-  - textures: main textures and complements (short phrase)
-  - layering: how the items are layered (short phrase + number of layers)
-  - aesthetic: Explain the reason why the outfit is chosen. (less than 50 words)
-- Format: "
-colors: black and grey
-textures: wool and leather
-layering: T-shirt with jacket and jeans (2 layers)
-aesthetic: The outfit is chosen because it is formal and suitable for the occasion.
-"
+- A friendly 2-4 sentence message to the user.
+- Briefly mention the date and weather if available.
+- Explain why these items work together: color harmony, how they suit the occasion, and the overall style vibe.
+- Example: "Hi! Today is 3/9, it's sunny and 20°C — perfect for a casual day out. I picked the white linen shirt, navy chinos, and white sneakers. The light tones keep it fresh and breathable, and the clean silhouette fits a relaxed weekend vibe perfectly."
 
 Your output must be valid JSON. Do not include any text outside the JSON object.`;

@@ -6,11 +6,17 @@
  */
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import VibeDropdown from "./VibeDropdown";
 import LocationSearch, { LocationItem } from "./LocationSearch";
 import DatePicker from "./DatePicker";
 import { useModels } from "@/contexts/ModelsContext";
+import { supabase } from "@/lib/db/client";
+
+interface QuotaInfo {
+  outfitsRemaining: number;
+  outfitDailyLimit: number;
+}
 
 interface DesignFormProps {
   formData: {
@@ -35,6 +41,34 @@ const DesignForm = ({
 }: DesignFormProps) => {
   const { models, getDefaultModelId, fetchModels } = useModels();
   const selectedModelId = formData.modelId || "";
+  const [quota, setQuota] = useState<QuotaInfo | null>(null);
+  const prevGenerating = useRef(false);
+
+  const fetchQuota = useCallback(async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+      const res = await fetch("/api/quota", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as QuotaInfo;
+        setQuota(data);
+      }
+    } catch {
+      // quota display is non-critical, fail silently
+    }
+  }, []);
+
+  useEffect(() => { fetchQuota(); }, [fetchQuota]);
+
+  // Refresh quota count after each generation completes
+  useEffect(() => {
+    if (prevGenerating.current && !isGenerating) {
+      fetchQuota();
+    }
+    prevGenerating.current = isGenerating;
+  }, [isGenerating, fetchQuota]);
 
   const sortedModels = useMemo(
     () =>
@@ -174,12 +208,12 @@ const DesignForm = ({
       {/* 生成按钮 */}
       <button
         className={`group relative mt-6 w-full ${
-          isGenerating
+          isGenerating || (quota?.outfitsRemaining === 0)
             ? "bg-[#7B5C49] cursor-not-allowed"
             : "bg-[#8B4513] hover:bg-[#A0522D]"
         } text-white text-lg font-extrabold py-5 rounded-xl transition-all shadow-md flex items-center justify-center gap-3 shrink-0`}
         onClick={onGenerate}
-        disabled={isGenerating}
+        disabled={isGenerating || quota?.outfitsRemaining === 0}
       >
         <span className="material-symbols-outlined">auto_fix_high</span>
         {isGenerating ? "GENERATING..." : "GENERATE MY OUTFIT"}
@@ -190,6 +224,25 @@ const DesignForm = ({
           star
         </span>
       </button>
+
+      {/* 剩余次数指示 */}
+      {quota !== null && (
+        <div className="flex items-center justify-center gap-1.5 mt-2">
+          {Array.from({ length: quota.outfitDailyLimit }).map((_, i) => (
+            <span
+              key={i}
+              className={`w-2 h-2 rounded-full transition-colors ${
+                i < quota.outfitsRemaining ? "bg-[#8B4513]" : "bg-[#C9B89C]"
+              }`}
+            />
+          ))}
+          <span className="text-xs text-[#857266] ml-1 font-medium">
+            {quota.outfitsRemaining === 0
+              ? "Daily limit reached"
+              : `${quota.outfitsRemaining} of ${quota.outfitDailyLimit} remaining today`}
+          </span>
+        </div>
+      )}
     </div>
   );
 };

@@ -8,6 +8,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import GoogleLoginButton from "./GoogleLoginButton";
 
 interface LoginFormProps {
@@ -71,12 +72,17 @@ const LoginForm = ({ onSwitchToRegister }: LoginFormProps) => {
         </div>
 
         <div>
-          <label
-            htmlFor="password"
-            className="block text-sm font-medium text-stone-700 mb-2"
-          >
-            Password
-          </label>
+          <div className="flex items-center justify-between mb-2">
+            <label htmlFor="password" className="block text-sm font-medium text-stone-700">
+              Password
+            </label>
+            <Link
+              href="/auth/reset-password"
+              className="text-xs text-[#8B5E3C] hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <input
             id="password"
             type="password"
