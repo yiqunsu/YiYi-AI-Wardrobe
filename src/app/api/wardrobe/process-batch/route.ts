@@ -14,21 +14,56 @@
  * Concurrency is controlled globally by `geminiLimit` — all users share the
  * same pool, so sending 10 items from 5 concurrent users will never exceed the
  * configured cap (default: 3 simultaneous Gemini calls).
+ *
+ * Rate limit: DAILY_LIMITS.wardrobe_process calls per day per user (shared
+ * pool with process-item).
  */
 import { NextRequest } from "next/server";
 import { createSupabaseClient } from "@/lib/db/server";
 import { processOneWardrobeItem } from "@/lib/wardrobe/wardrobe.service";
 import { geminiLimit } from "@/lib/queue/gemini.queue";
+import { logUsage } from "@/lib/analytics/usage.logger";
+import { checkDailyQuota } from "@/lib/analytics/quota.server";
 
 const MAX_IDS = 10;
 
 export async function POST(request: NextRequest) {
-  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
+  const token =
+    request.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? null;
   if (!token) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
+  }
+
+  // ── Auth: resolve user ID for quota check ────────────────
+  const supabase = createSupabaseClient(token);
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser(token);
+  if (authError || !user) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
+  // ── Daily quota check ────────────────────────────────────
+  const quota = await checkDailyQuota(user.id, "wardrobe_process");
+  if (!quota.allowed) {
+    logUsage({
+      userId: user.id,
+      action: "wardrobe_process",
+      status: "quota_exceeded",
+    });
+    return new Response(
+      JSON.stringify({
+        error: `Daily processing limit reached. You can process up to ${quota.limit} batches per day.`,
+      }),
+      { status: 429, headers: { "Content-Type": "application/json" } }
+    );
   }
 
   let ids: string[];
@@ -46,10 +81,10 @@ export async function POST(request: NextRequest) {
   }
 
   if (ids.length === 0) {
-    return new Response(JSON.stringify({ error: "Missing or invalid wardrobeItemIds" }), {
-      status: 400,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ error: "Missing or invalid wardrobeItemIds" }),
+      { status: 400, headers: { "Content-Type": "application/json" } }
+    );
   }
   if (ids.length > MAX_IDS) {
     return new Response(
@@ -58,7 +93,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const supabase = createSupabaseClient(token);
   const total = ids.length;
   const enc = new TextEncoder();
 
@@ -94,6 +128,13 @@ export async function POST(request: NextRequest) {
           })
         )
       );
+
+      logUsage({
+        userId: user.id,
+        action: "wardrobe_process",
+        status: "success",
+        metadata: { count: ids.length, succeeded: success.length, failed: failed.length },
+      });
 
       controller.enqueue(
         enc.encode(JSON.stringify({ type: "done", success, failed }) + "\n")

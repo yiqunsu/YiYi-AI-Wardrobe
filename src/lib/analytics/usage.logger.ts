@@ -7,7 +7,10 @@
 import "server-only";
 import { supabaseAdmin } from "@/lib/db/admin";
 
-type UsageAction = "outfit_generate" | "wardrobe_upload" | "wardrobe_process";
+export type UsageAction =
+  | "outfit_generate"
+  | "wardrobe_upload"
+  | "wardrobe_process";
 type UsageStatus = "success" | "error" | "quota_exceeded";
 
 export interface UsageLogPayload {
@@ -16,6 +19,7 @@ export interface UsageLogPayload {
   status: UsageStatus;
   metadata?: Record<string, unknown>;
 }
+
 
 export function logUsage(payload: UsageLogPayload): void {
   supabaseAdmin

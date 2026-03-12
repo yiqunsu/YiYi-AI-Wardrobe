@@ -1,6 +1,7 @@
 /**
  * POST /api/wardrobe/upload-batch [module: api / wardrobe]
- * Accepts up to 10 clothing image files, enforces wardrobe (50 items) and monthly (50 uploads) quotas.
+ * Accepts up to 10 clothing image files, enforces wardrobe and monthly upload quotas.
+ * Wardrobe capacity limit is read from user_settings (per-user override) with a default of 50.
  * Optionally generates a clean product image via Gemini before storing in Supabase Storage.
  *
  * Files are processed sequentially and progress is streamed back as NDJSON so the client
@@ -14,9 +15,13 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseClient } from "@/lib/db/server";
+import { supabaseAdmin } from "@/lib/db/admin";
 import { generateProductImage } from "@/lib/image/product.image";
 import sharp from "sharp";
 import { logUsage } from "@/lib/analytics/usage.logger";
+
+const DEFAULT_WARDROBE_LIMIT = 50;
+const DEFAULT_MONTHLY_UPLOAD_LIMIT = 50;
 
 /** Allow up to 60 s for large batch uploads on Vercel / Next.js edge runtime. */
 export const maxDuration = 60;
@@ -64,14 +69,25 @@ export async function POST(request: NextRequest) {
   }
 
   // ── 配额检查 ──────────────────────────────────────────────
+  // Read per-user overrides from user_settings via admin client (bypasses RLS).
+  const { data: userSettings } = await supabaseAdmin
+    .from("user_settings")
+    .select("wardrobe_limit")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  const wardrobeLimit =
+    (userSettings as { wardrobe_limit?: number } | null)?.wardrobe_limit ??
+    DEFAULT_WARDROBE_LIMIT;
+
   const { count: totalItems } = await supabase
     .from("wardrobe_items")
     .select("*", { count: "exact", head: true })
     .eq("user_id", user.id);
 
-  if ((totalItems ?? 0) >= 50) {
+  if ((totalItems ?? 0) >= wardrobeLimit) {
     return NextResponse.json(
-      { error: "Wardrobe limit reached. You can store up to 50 items." },
+      { error: `Wardrobe limit reached. You can store up to ${wardrobeLimit} items.` },
       { status: 429 }
     );
   }
@@ -86,9 +102,9 @@ export async function POST(request: NextRequest) {
     .eq("user_id", user.id)
     .gte("created_at", startOfMonth.toISOString());
 
-  if ((monthItems ?? 0) >= 50) {
+  if ((monthItems ?? 0) >= DEFAULT_MONTHLY_UPLOAD_LIMIT) {
     return NextResponse.json(
-      { error: "Monthly upload limit reached. You can upload up to 50 items per month." },
+      { error: `Monthly upload limit reached. You can upload up to ${DEFAULT_MONTHLY_UPLOAD_LIMIT} items per month.` },
       { status: 429 }
     );
   }
@@ -105,18 +121,18 @@ export async function POST(request: NextRequest) {
   if (list.length > MAX_FILES) {
     return NextResponse.json({ error: `At most ${MAX_FILES} files per batch` }, { status: 400 });
   }
-  if ((totalItems ?? 0) + list.length > 50) {
+  if ((totalItems ?? 0) + list.length > wardrobeLimit) {
     return NextResponse.json(
       {
-        error: `This batch would exceed the 50-item wardrobe limit (currently ${totalItems ?? 0} items). Please remove some items first.`,
+        error: `This batch would exceed the ${wardrobeLimit}-item wardrobe limit (currently ${totalItems ?? 0} items). Please remove some items first.`,
       },
       { status: 429 }
     );
   }
-  if ((monthItems ?? 0) + list.length > 50) {
+  if ((monthItems ?? 0) + list.length > DEFAULT_MONTHLY_UPLOAD_LIMIT) {
     return NextResponse.json(
       {
-        error: `This batch would exceed the 50-upload monthly limit (${monthItems ?? 0} uploaded this month). Try again next month.`,
+        error: `This batch would exceed the ${DEFAULT_MONTHLY_UPLOAD_LIMIT}-upload monthly limit (${monthItems ?? 0} uploaded this month). Try again next month.`,
       },
       { status: 429 }
     );

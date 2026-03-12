@@ -9,6 +9,7 @@
  */
 import { NextRequest, NextResponse } from "next/server";
 import { createSupabaseClient } from "@/lib/db/server";
+import { supabaseAdmin } from "@/lib/db/admin";
 import { getWeatherForLocation } from "@/lib/weather/weather.service";
 import { searchWardrobeByEmbedding } from "@/lib/wardrobe/wardrobe.embedding";
 import { recommendOutfit } from "@/lib/outfit/outfit.service";
@@ -60,7 +61,8 @@ export async function POST(req: NextRequest) {
   if (authError || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   // ── 2. 配额检查（支持 user_settings 覆盖）──────────────
-  const { data: userSettings } = await supabase
+  // Must use admin client — user_settings has no user-facing RLS policies.
+  const { data: userSettings } = await supabaseAdmin
     .from("user_settings")
     .select("outfit_daily_limit")
     .eq("user_id", user.id)
