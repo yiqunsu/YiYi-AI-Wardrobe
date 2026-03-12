@@ -27,10 +27,10 @@ const steps = [
 ];
 
 const howToUseImages = [
-  "/images/room.webp",
-  "/images/yiyi_profile_photo.webp",
-  "/images/yiyi.webp",
-  "/images/room.webp",
+  "/images/comic1.png",
+  "/images/comic3.png",
+  "/images/comic2.png",
+  "/images/comic4.png",
 ];
 
 const HowToUseSection = () => {
@@ -64,7 +64,7 @@ const HowToUseSection = () => {
               </div>
             ))}
           </div>
-          <div className="relative overflow-hidden rounded-xl border border-[#C4A484]/10 bg-[#C4A484]/5 p-8">
+          <div className="relative overflow-hidden rounded-xl border border-[#C4A484]/10 bg-[#f7f1e8] p-8">
             <div className="grid grid-cols-2 gap-4">
               {/* 左列图片 */}
               <div className="space-y-4">

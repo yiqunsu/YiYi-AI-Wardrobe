@@ -9,7 +9,7 @@
  */
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/lib/db/client";
@@ -63,6 +63,8 @@ export default function WardrobePage() {
   const [uploadProgress, setUploadProgress] = useState<UploadProgress>({ completed: 0, total: 0 });
   const [processProgress, setProcessProgress] = useState<ProcessProgress>({ completed: 0, total: 0 });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [wardrobeQuota, setWardrobeQuota] = useState<{ wardrobeCount: number; wardrobeLimit: number } | null>(null);
+  const prevUploadPhaseRef = useRef<UploadPhase>("idle");
 
   const [editModalItem, setEditModalItem] = useState<WardrobeItem | null>(null);
   const [editDraft, setEditDraft] = useState<{
@@ -77,6 +79,34 @@ export default function WardrobePage() {
     const { data: { session } } = await supabase.auth.getSession();
     return session?.access_token ?? null;
   }, []);
+
+  const fetchWardrobeQuota = useCallback(async () => {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch("/api/quota", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json() as { wardrobeCount: number; wardrobeLimit: number };
+        setWardrobeQuota({ wardrobeCount: data.wardrobeCount, wardrobeLimit: data.wardrobeLimit });
+      }
+    } catch {
+      // quota display is non-critical, fail silently
+    }
+  }, [getToken]);
+
+  useEffect(() => {
+    if (user?.id) fetchWardrobeQuota();
+  }, [user?.id, fetchWardrobeQuota]);
+
+  // Refresh quota after each upload completes
+  useEffect(() => {
+    if (prevUploadPhaseRef.current !== "done" && uploadPhase === "done") {
+      fetchWardrobeQuota();
+    }
+    prevUploadPhaseRef.current = uploadPhase;
+  }, [uploadPhase, fetchWardrobeQuota]);
 
   const {
     data: items = [],
@@ -478,6 +508,23 @@ export default function WardrobePage() {
             Click to open upload window, add photos in batch, then confirm. Max {MAX_BATCH_FILES} per batch.
           </p>
         </div>
+
+        {/* 衣橱剩余名额指示 */}
+        {wardrobeQuota !== null && (
+          <div className="flex items-center justify-center gap-2 -mt-5 mb-6">
+            <div className="w-28 h-1.5 rounded-full bg-[#C9B89C] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-[#8B4513] transition-all"
+                style={{ width: `${Math.min(100, (wardrobeQuota.wardrobeCount / wardrobeQuota.wardrobeLimit) * 100)}%` }}
+              />
+            </div>
+            <span className="text-xs text-[#857266] font-medium">
+              {wardrobeQuota.wardrobeLimit - wardrobeQuota.wardrobeCount === 0
+                ? "Wardrobe full"
+                : `${wardrobeQuota.wardrobeLimit - wardrobeQuota.wardrobeCount} of ${wardrobeQuota.wardrobeLimit} slots remaining`}
+            </span>
+          </div>
+        )}
 
         {/* 上传弹窗：同风格，内为待上传列表 + 点击上传 + 确认上传 */}
         {modalOpen && (
