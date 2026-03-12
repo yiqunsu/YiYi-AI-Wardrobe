@@ -60,7 +60,10 @@ const Navbar = () => {
             </span>
           </Link>
           <div className="hidden items-center gap-8 text-sm font-medium text-stone-600 md:flex">
-            <Link href="/service/create" className="transition-colors hover:text-[#8B5E3C]">
+            <Link
+              href="/service/create"
+              className="rounded-full border border-[#8B5E3C] px-4 py-1.5 text-[#8B5E3C] transition-all hover:bg-[#8B5E3C] hover:text-white"
+            >
               Service
             </Link>
             <Link href="/pricing" className="transition-colors hover:text-[#8B5E3C]">
